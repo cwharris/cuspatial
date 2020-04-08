@@ -16,7 +16,10 @@
 
 #pragma once
 
-typedef struct gdf_column_ gdf_column; // forward declaration
+#include <memory>
+#include <cudf/types.hpp>
+
+// typedef struct gdf_column_ gdf_column; // forward declaration
 
 namespace cuspatial {
 
@@ -37,7 +40,9 @@ namespace cuspatial {
  * 
  * @note Hausdorff distance is not symmetrical
  */
-gdf_column directed_hausdorff_distance(const gdf_column& x, const gdf_column& y,
-                                       const gdf_column& vertex_counts);
+std::unique_ptr<cudf::column>
+directed_hausdorff_distance(cudf::column_view const& x,
+                            cudf::column_view const& y,
+                            cudf::column_view const& vertex_counts);
 
 }  // namespace cuspatial
