@@ -340,7 +340,6 @@ add_library(cuspatial SHARED
             src/spatial/point_in_polygon.cu
             src/spatial_window/spatial_window.cu
             src/spatial_window/legacy/spatial_window_points.cu
-            src/spatial/legacy/point_in_polygon.cu
             src/spatial/legacy/haversine.cu
             src/spatial/haversine.cu
             src/spatial/legacy/hausdorff.cu

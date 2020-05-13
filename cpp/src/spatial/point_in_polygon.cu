@@ -24,7 +24,6 @@
 #include <utilities/legacy/cuda_utils.hpp>
 #include <type_traits>
 #include <utility/legacy/utility.hpp>
-#include <cuspatial/legacy/point_in_polygon.hpp>
 #include <cuspatial/error.hpp>
 
 #include <cudf/legacy/column.hpp>
