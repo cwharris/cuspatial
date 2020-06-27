@@ -16,21 +16,28 @@
 
 #pragma once
 
-#include <cudf/column/column_device_view.cuh>
+#include <cudf/types.hpp>
 
-/** @brief Computes a size based on a column of offsets and a final length
- */
+namespace cuspatial {
+namespace detail {
+
+template <typename OffsetIterator>
 struct size_from_offsets_functor {
-  cudf::column_device_view offsets;
-  cudf::size_type length;
+  OffsetIterator group_offsets;
+  cudf::size_type group_count;
+  cudf::size_type element_count;
 
-  cudf::size_type __device__ operator()(cudf::size_type idx)
+  cudf::size_type __device__ operator()(cudf::size_type group_idx)
   {
-    auto curr_offset = offsets.element<cudf::size_type>(idx);
-    auto next_idx    = idx + 1;
-    auto next_offset =
-      next_idx >= offsets.size() ? length : offsets.element<cudf::size_type>(next_idx);
+    auto group_idx_next = group_idx + 1;
 
-    return next_offset - curr_offset;
+    auto group_begin = *(group_offsets + group_idx);
+    auto group_end =
+      group_idx_next >= group_count ? element_count : *(group_offsets + group_idx_next);
+
+    return group_end - group_begin;
   }
 };
+
+}  // namespace detail
+}  // namespace cuspatial
