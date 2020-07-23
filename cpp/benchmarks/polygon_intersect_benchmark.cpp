@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <cuspatial/polygon_distance.hpp>
+#include <cuspatial/polygon_intersect.hpp>
 
 #include <benchmarks/fixture/benchmark_fixture.hpp>
 #include <benchmarks/synchronization/synchronization.hpp>
@@ -23,7 +23,7 @@
 
 #include <thrust/iterator/constant_iterator.h>
 
-static void BM_polygon_distance(benchmark::State& state)
+static void BM_polygon_intersect(benchmark::State& state)
 {
   int32_t num_points           = state.range(1) - 1;
   int32_t num_spaces_asked     = state.range(0) - 1;
@@ -44,23 +44,23 @@ static void BM_polygon_distance(benchmark::State& state)
 
   for (auto _ : state) {
     cuda_event_timer raii(state, true);
-    cuspatial::directed_polygon_distance(xs, ys, space_offsets);
+    cuspatial::polygon_intersect(xs, ys, space_offsets);
   }
 
   state.SetItemsProcessed(state.iterations() * num_points * num_points);
 }
 
-class PolygonDistanceBenchmark : public cuspatial::benchmark {
+class PolygonIntersectBenchmark : public cuspatial::benchmark {
 };
 
-#define DUMMY_BM_BENCHMARK_DEFINE(name)                                          \
-  BENCHMARK_DEFINE_F(PolygonDistanceBenchmark, name)(::benchmark::State & state) \
-  {                                                                              \
-    BM_polygon_distance(state);                                                  \
-  }                                                                              \
-  BENCHMARK_REGISTER_F(PolygonDistanceBenchmark, name)                           \
-    ->Ranges({{1 << 10, 1 << 14}, {1 << 10, 1 << 15}})                           \
-    ->UseManualTime()                                                            \
+#define DUMMY_BM_BENCHMARK_DEFINE(name)                                           \
+  BENCHMARK_DEFINE_F(PolygonIntersectBenchmark, name)(::benchmark::State & state) \
+  {                                                                               \
+    BM_polygon_intersect(state);                                                  \
+  }                                                                               \
+  BENCHMARK_REGISTER_F(PolygonIntersectBenchmark, name)                           \
+    ->Ranges({{1 << 10, 1 << 14}, {1 << 10, 1 << 15}})                            \
+    ->UseManualTime()                                                             \
     ->Unit(benchmark::kMillisecond);
 
-DUMMY_BM_BENCHMARK_DEFINE(polygon_distance);
+DUMMY_BM_BENCHMARK_DEFINE(polygon_intersect);

@@ -111,6 +111,10 @@ set(POLYGON_DISTANCE_TEST_SRC
    "${CMAKE_CURRENT_SOURCE_DIR}/spatial/polygon_distance_test.cpp")
 ConfigureTest(POLYGON_DISTANCE_TEST "${POLYGON_DISTANCE_TEST_SRC}")
 
+set(POLYGON_INTERSECT_TEST_SRC
+   "${CMAKE_CURRENT_SOURCE_DIR}/spatial/polygon_intersect_test.cpp")
+ConfigureTest(POLYGON_INTERSECT_TEST "${POLYGON_INTERSECT_TEST_SRC}")
+
 set(POINT_IN_POLYGON_TEST_SRC
     "${CMAKE_CURRENT_SOURCE_DIR}/spatial/point_in_polygon_test.cpp")
 ConfigureTest(POINT_IN_POLYGON_TEST "${POINT_IN_POLYGON_TEST_SRC}")

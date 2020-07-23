@@ -312,6 +312,7 @@ add_library(cuspatial SHARED
             src/spatial/polygon_bounding_box.cu
             src/spatial/polyline_bounding_box.cu
             src/spatial/polygon_distance.cu
+            src/spatial/polygon_intersect.cu
             src/spatial/point_in_polygon.cu
             src/spatial_window/spatial_window.cu
             src/spatial/haversine.cu

@@ -15,7 +15,6 @@
  */
 
 #include <cuspatial/error.hpp>
-#include <cuspatial/hausdorff.hpp>
 #include <cuspatial/polygon_distance.hpp>
 
 #include <tests/utilities/base_fixture.hpp>
