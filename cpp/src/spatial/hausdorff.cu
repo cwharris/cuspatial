@@ -32,14 +32,101 @@
 #include <rmm/exec_policy.hpp>
 
 #include <thrust/binary_search.h>
+#include <thrust/iterator/discard_iterator.h>
 #include <thrust/iterator/transform_iterator.h>
 
+#include <iostream>
 #include <limits>
 #include <memory>
 
 namespace cuspatial {
 namespace detail {
 namespace {
+
+struct partition_size_agg {
+  uint32_t value;
+  uint32_t group;
+
+  inline constexpr partition_size_agg operator+(partition_size_agg other)
+  {
+    auto next_value = value + other.value;
+    auto next_group = group + other.group;
+
+    if (next_value > (1ull << 31)) {
+      next_value = other.value;
+      next_group = next_group + 1;
+    }
+
+    return {next_value, next_group};
+  }
+};
+
+struct get_group {
+  inline constexpr uint32_t operator()(partition_size_agg agg) { return agg.group; }
+};
+
+struct get_value {
+  inline constexpr uint32_t operator()(partition_size_agg agg) { return agg.value; }
+};
+
+thrust::host_vector<uint32_t> get_partition_sizes(uint32_t num_offsets,
+                                                  uint32_t num_elements,
+                                                  uint32_t const* offsets,
+                                                  rmm::cuda_stream_view stream)
+{
+  auto num_pairs  = num_offsets * num_offsets;
+  auto sizes_iter = make_size_from_offset_iterator(num_offsets, num_elements, offsets);
+  auto areas      = thrust::make_transform_iterator(
+    thrust::make_counting_iterator(0), [num_offsets, sizes_iter] __device__(int idx) {
+      return sizes_iter[idx / num_offsets] * sizes_iter[idx % num_offsets];
+    });
+
+  auto aggs = rmm::device_uvector<partition_size_agg>(num_pairs, stream);
+
+  thrust::transform(
+    rmm::exec_policy(stream), areas, areas + num_pairs, aggs.begin(), [] __device__(uint32_t area) {
+      return partition_size_agg{area, 0};
+    });
+
+  thrust::inclusive_scan(rmm::exec_policy(stream),  //
+                         aggs.begin(),
+                         aggs.end(),
+                         aggs.begin());
+
+  auto num_partitions = aggs.back_element(stream).group + 1;
+
+  std::cout << "num partitions: " << num_partitions << std::endl;
+
+  auto partition_sizes = rmm::device_uvector<uint32_t>(num_partitions, stream);
+
+  auto keys   = thrust::make_transform_iterator(aggs.begin(), get_group{});
+  auto values = thrust::make_transform_iterator(aggs.begin(), get_value{});
+
+  thrust::reduce_by_key(
+    rmm::exec_policy(stream),
+    keys,
+    keys + num_pairs,
+    values,
+    thrust::make_discard_iterator(),
+    partition_sizes.begin(),
+    [] __device__(uint32_t a, uint32_t b) { return a == b; },
+    [] __device__(uint32_t a, uint32_t b) { return b; });
+
+  auto partition_sizes_h = thrust::host_vector<uint32_t>(num_partitions);
+
+  std::cout << "partition_sizes_h: " << std::endl;
+
+  cudaMemcpy(partition_sizes_h.data(),
+             partition_sizes.data(),
+             partition_sizes_h.size() * sizeof(uint32_t),
+             cudaMemcpyDeviceToHost);
+
+  for (uint32_t i = 0; i < partition_sizes_h.size(); i++) {
+    std::cout << " partition_sizes_h[" << i << "] = " << partition_sizes_h[i] << std::endl;
+  }
+
+  return partition_sizes_h;
+}
 
 template <typename T>
 struct hausdorff_accumulator_factory {
@@ -86,6 +173,11 @@ struct hausdorff_functor {
       return cudf::make_empty_column(cudf::data_type{cudf::type_to_id<T>()});
     }
 
+    // ===== Partition Inputs ======================================================================
+
+    auto partition_sizes =
+      get_partition_sizes(num_spaces, num_points, space_offsets.begin<uint32_t>(), stream);
+
     // ===== Make Hausdorff Accumulator ============================================================
 
     auto gcp_iter = make_cartesian_product_group_index_iterator(
@@ -126,33 +218,16 @@ struct hausdorff_functor {
         return thrust::make_pair(idx.group_a.idx, idx.group_b.idx);
       });
 
-    // the following output iterator and `inclusive_scan_by_key` could be replaced by a
-    // reduce_by_key, if it supported non-commutative operators.
-
-    auto const num_cartesian =
-      static_cast<uint64_t>(num_points) * static_cast<uint64_t>(num_points);
-
-    //
-    // `thrust::inclusive_scan_by_key` causes an out-of-memory
-    // error on input sizes close to (but not exactly) INT_MAX.
-    //
-    // Doing the reduction in chunks is a temporary workaround until this is fixed.
-    //
-    // The magic number between OOM vs. no OOM is somewhere between:
-    //                                             (1uL << 31uL) - 2048uL;
-    auto const magic_inclusive_scan_by_key_limit = (1uL << 31uL) - 4096uL;
-
-    for (auto itr = gpc_key_iter, end = gpc_key_iter + num_cartesian; itr < end;) {
-      auto const len = static_cast<uint32_t>(std::min(
-        static_cast<uint64_t>(thrust::distance(itr, end)), magic_inclusive_scan_by_key_limit));
-
+    for (uint32_t i = 0; i < partition_sizes.size(); i++) {
       thrust::inclusive_scan_by_key(rmm::exec_policy(stream),
-                                    itr,
-                                    itr + len,
+                                    gpc_key_iter,
+                                    gpc_key_iter + partition_sizes[i],
                                     hausdorff_acc_iter,
                                     scatter_out,
                                     thrust::equal_to<thrust::pair<uint32_t, uint32_t>>());
-      thrust::advance(itr, len);
+
+      gpc_key_iter += partition_sizes[i];
+      scatter_out += partition_sizes[i];
     }
 
     thrust::transform(rmm::exec_policy(stream),

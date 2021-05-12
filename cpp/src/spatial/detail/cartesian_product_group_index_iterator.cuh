@@ -142,10 +142,8 @@ auto make_cartesian_product_group_index_iterator(uint32_t const num_elements_a,
   using SizeFunctorA = detail::size_from_offsets_functor<OffsetIteratorA>;
   using SizeFunctorB = detail::size_from_offsets_functor<OffsetIteratorB>;
 
-  auto group_sizes_a = thrust::make_transform_iterator(
-    count_iter, SizeFunctorA{num_groups_a, num_elements_a, group_offsets_a});
-  auto group_sizes_b = thrust::make_transform_iterator(
-    count_iter, SizeFunctorB{num_groups_b, num_elements_b, group_offsets_b});
+  auto group_sizes_a = make_size_from_offset_iterator(num_groups_a, num_elements_a, group_offsets_a);
+  auto group_sizes_b = make_size_from_offset_iterator(num_groups_b, num_elements_b, group_offsets_b);
   auto group_lookup_a = thrust::make_transform_iterator(
     count_iter, group_lookup_functor<OffsetIteratorA>{group_offsets_a, num_groups_a});
   auto group_lookup_b = thrust::make_transform_iterator(

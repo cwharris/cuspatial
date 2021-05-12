@@ -16,6 +16,9 @@
 
 #pragma once
 
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/iterator/transform_iterator.h>
+
 namespace cuspatial {
 namespace detail {
 
@@ -35,6 +38,17 @@ struct size_from_offsets_functor {
     return group_end - group_begin;
   }
 };
+
+template<typename OffsetIterator>
+auto make_size_from_offset_iterator(uint32_t num_offsets,
+                                    uint32_t num_elements,
+                                    OffsetIterator const offsets)
+{
+  return thrust::make_transform_iterator(  //
+    thrust::make_counting_iterator(uint64_t{0}),
+    detail::size_from_offsets_functor<OffsetIterator>{
+      num_offsets, num_elements, offsets});
+}
 
 }  // namespace detail
 }  // namespace cuspatial
