@@ -43,90 +43,91 @@ namespace cuspatial {
 namespace detail {
 namespace {
 
-struct partition_size_agg {
-  uint32_t value;
-  uint32_t group;
+// struct partition_size_agg {
+//   uint32_t value;
+//   uint32_t group;
 
-  inline constexpr partition_size_agg operator+(partition_size_agg other)
-  {
-    auto next_value = value + other.value;
-    auto next_group = group + other.group;
+//   inline constexpr partition_size_agg operator+(partition_size_agg other)
+//   {
+//     auto next_value = value + other.value;
+//     auto next_group = group + other.group;
 
-    if (next_value > (1ull << 31)) {
-      next_value = other.value;
-      next_group = next_group + 1;
-    }
+//     if (next_value > (1ull << 31)) {
+//       next_value = other.value;
+//       next_group = next_group + 1;
+//     }
 
-    return {next_value, next_group};
-  }
-};
+//     return {next_value, next_group};
+//   }
+// };
 
-struct get_group {
-  inline constexpr uint32_t operator()(partition_size_agg agg) { return agg.group; }
-};
+// struct get_group {
+//   inline constexpr uint32_t operator()(partition_size_agg agg) { return agg.group; }
+// };
 
-struct get_value {
-  inline constexpr uint32_t operator()(partition_size_agg agg) { return agg.value; }
-};
+// struct get_value {
+//   inline constexpr uint32_t operator()(partition_size_agg agg) { return agg.value; }
+// };
 
-thrust::host_vector<uint32_t> get_partition_sizes(uint32_t num_offsets,
-                                                  uint32_t num_elements,
-                                                  uint32_t const* offsets,
-                                                  rmm::cuda_stream_view stream)
-{
-  auto num_pairs  = num_offsets * num_offsets;
-  auto sizes_iter = make_size_from_offset_iterator(num_offsets, num_elements, offsets);
-  auto areas      = thrust::make_transform_iterator(
-    thrust::make_counting_iterator(0), [num_offsets, sizes_iter] __device__(int idx) {
-      return sizes_iter[idx / num_offsets] * sizes_iter[idx % num_offsets];
-    });
+// thrust::host_vector<uint32_t> get_partition_sizes(uint32_t num_offsets,
+//                                                   uint32_t num_elements,
+//                                                   uint32_t const* offsets,
+//                                                   rmm::cuda_stream_view stream)
+// {
+//   auto num_pairs  = num_offsets * num_offsets;
+//   auto sizes_iter = make_size_from_offset_iterator(num_offsets, num_elements, offsets);
+//   auto areas      = thrust::make_transform_iterator(
+//     thrust::make_counting_iterator(0), [num_offsets, sizes_iter] __device__(int idx) {
+//       return sizes_iter[idx / num_offsets] * sizes_iter[idx % num_offsets];
+//     });
 
-  auto aggs = rmm::device_uvector<partition_size_agg>(num_pairs, stream);
+//   auto aggs = rmm::device_uvector<partition_size_agg>(num_pairs, stream);
 
-  thrust::transform(
-    rmm::exec_policy(stream), areas, areas + num_pairs, aggs.begin(), [] __device__(uint32_t area) {
-      return partition_size_agg{area, 0};
-    });
+//   thrust::transform(
+//     rmm::exec_policy(stream), areas, areas + num_pairs, aggs.begin(), [] __device__(uint32_t
+//     area) {
+//       return partition_size_agg{area, 0};
+//     });
 
-  thrust::inclusive_scan(rmm::exec_policy(stream),  //
-                         aggs.begin(),
-                         aggs.end(),
-                         aggs.begin());
+//   thrust::inclusive_scan(rmm::exec_policy(stream),  //
+//                          aggs.begin(),
+//                          aggs.end(),
+//                          aggs.begin());
 
-  auto num_partitions = aggs.back_element(stream).group + 1;
+//   auto num_partitions = aggs.back_element(stream).group + 1;
 
-  std::cout << "num partitions: " << num_partitions << std::endl;
+//   std::cout << "num partitions: " << num_partitions << std::endl;
 
-  auto partition_sizes = rmm::device_uvector<uint32_t>(num_partitions, stream);
+//   auto partition_sizes = rmm::device_uvector<uint32_t>(num_partitions, stream);
 
-  auto keys   = thrust::make_transform_iterator(aggs.begin(), get_group{});
-  auto values = thrust::make_transform_iterator(aggs.begin(), get_value{});
+//   auto keys   = thrust::make_transform_iterator(aggs.begin(), get_group{});
+//   auto values = thrust::make_transform_iterator(aggs.begin(), get_value{});
 
-  thrust::reduce_by_key(
-    rmm::exec_policy(stream),
-    keys,
-    keys + num_pairs,
-    values,
-    thrust::make_discard_iterator(),
-    partition_sizes.begin(),
-    [] __device__(uint32_t a, uint32_t b) { return a == b; },
-    [] __device__(uint32_t a, uint32_t b) { return b; });
+//   thrust::reduce_by_key(
+//     rmm::exec_policy(stream),
+//     keys,
+//     keys + num_pairs,
+//     values,
+//     thrust::make_discard_iterator(),
+//     partition_sizes.begin(),
+//     [] __device__(uint32_t a, uint32_t b) { return a == b; },
+//     [] __device__(uint32_t a, uint32_t b) { return b; });
 
-  auto partition_sizes_h = thrust::host_vector<uint32_t>(num_partitions);
+//   auto partition_sizes_h = thrust::host_vector<uint32_t>(num_partitions);
 
-  std::cout << "partition_sizes_h: " << std::endl;
+//   std::cout << "partition_sizes_h: " << std::endl;
 
-  cudaMemcpy(partition_sizes_h.data(),
-             partition_sizes.data(),
-             partition_sizes_h.size() * sizeof(uint32_t),
-             cudaMemcpyDeviceToHost);
+//   cudaMemcpy(partition_sizes_h.data(),
+//              partition_sizes.data(),
+//              partition_sizes_h.size() * sizeof(uint32_t),
+//              cudaMemcpyDeviceToHost);
 
-  for (uint32_t i = 0; i < partition_sizes_h.size(); i++) {
-    std::cout << " partition_sizes_h[" << i << "] = " << partition_sizes_h[i] << std::endl;
-  }
+//   for (uint32_t i = 0; i < partition_sizes_h.size(); i++) {
+//     std::cout << " partition_sizes_h[" << i << "] = " << partition_sizes_h[i] << std::endl;
+//   }
 
-  return partition_sizes_h;
-}
+//   return partition_sizes_h;
+// }
 
 template <typename T>
 struct hausdorff_accumulator_factory {
@@ -173,11 +174,6 @@ struct hausdorff_functor {
       return cudf::make_empty_column(cudf::data_type{cudf::type_to_id<T>()});
     }
 
-    // ===== Partition Inputs ======================================================================
-
-    auto partition_sizes =
-      get_partition_sizes(num_spaces, num_points, space_offsets.begin<uint32_t>(), stream);
-
     // ===== Make Hausdorff Accumulator ============================================================
 
     auto gcp_iter = make_cartesian_product_group_index_iterator(
@@ -218,17 +214,53 @@ struct hausdorff_functor {
         return thrust::make_pair(idx.group_a.idx, idx.group_b.idx);
       });
 
-    for (uint32_t i = 0; i < partition_sizes.size(); i++) {
-      thrust::inclusive_scan_by_key(rmm::exec_policy(stream),
-                                    gpc_key_iter,
-                                    gpc_key_iter + partition_sizes[i],
-                                    hausdorff_acc_iter,
-                                    scatter_out,
-                                    thrust::equal_to<thrust::pair<uint32_t, uint32_t>>());
+    auto space_offsets_h = thrust::host_vector<uint32_t>(num_spaces);
 
-      gpc_key_iter += partition_sizes[i];
-      scatter_out += partition_sizes[i];
+    cudaMemcpy(space_offsets_h.data(),
+               space_offsets.begin<uint32_t>(),
+               space_offsets.size() * sizeof(uint32_t),
+               cudaMemcpyDeviceToHost);
+
+    auto sizes_iter =
+      make_size_from_offset_iterator(num_spaces, num_points, space_offsets_h.begin());
+
+    uint32_t partition_size = 0;
+
+    for (uint32_t idx = 0; idx < num_results; idx++) {
+      auto x = idx / num_spaces;
+      auto y = idx % num_spaces;
+      auto next_area = sizes_iter[x] * sizes_iter[y];
+
+      if (partition_size >= std::numeric_limits<uint32_t>::max()/2 - next_area) {
+        // execute scan
+
+        thrust::inclusive_scan_by_key(rmm::exec_policy(stream),
+                                      gpc_key_iter,
+                                      gpc_key_iter + partition_size,
+                                      hausdorff_acc_iter,
+                                      scatter_out,
+                                      thrust::equal_to<thrust::pair<uint32_t, uint32_t>>());
+
+        gpc_key_iter += partition_size;
+        scatter_out += partition_size;
+
+        // reset partition size;
+        partition_size = 0;
+      }
+
+      partition_size += next_area;
     }
+
+    // execute scan for last partition
+
+    thrust::inclusive_scan_by_key(rmm::exec_policy(stream),
+                                  gpc_key_iter,
+                                  gpc_key_iter + partition_size,
+                                  hausdorff_acc_iter,
+                                  scatter_out,
+                                  thrust::equal_to<thrust::pair<uint32_t, uint32_t>>());
+
+    std::cout << "partition_size (post): " << partition_size << std::endl;
 
     thrust::transform(rmm::exec_policy(stream),
                       result_temp.begin(),
